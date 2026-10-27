@@ -1,0 +1,17 @@
+export { Document } from './Document.ts';
+export { ContainerNotFoundError } from './errors/ContainerNotFoundError.ts';
+export { DomainError } from './errors/DomainError.ts';
+export { DuplicateIdError } from './errors/DuplicateIdError.ts';
+export { InvalidOperationError } from './errors/InvalidOperationError.ts';
+export { InvalidValueError } from './errors/InvalidValueError.ts';
+export { NotContainerError } from './errors/NotContainerError.ts';
+export { ShapeNotFoundError } from './errors/ShapeNotFoundError.ts';
+export { UnknownAttributeError } from './errors/UnknownAttributeError.ts';
+export { CircleShape } from './shapes/CircleShape.ts';
+export { EllipseShape } from './shapes/EllipseShape.ts';
+export { GroupShape } from './shapes/GroupShape.ts';
+export { LineShape } from './shapes/LineShape.ts';
+export { RectShape } from './shapes/RectShape.ts';
+export { Shape } from './shapes/Shape.ts';
+export type { ShapeKind } from './shapes/ShapeKind.ts';
+export { TextShape } from './shapes/TextShape.ts';

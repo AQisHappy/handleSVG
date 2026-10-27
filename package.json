@@ -1,0 +1,17 @@
+{
+  "name": "handle-svg",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "SVG CLI editor",
+  "engines": { "node": ">=22.18.0" },
+  "scripts": {
+    "test": "node --test test/document.test.ts test/shape.test.ts test/composite.test.ts",
+    "test:watch": "node --test --watch test/document.test.ts test/shape.test.ts test/composite.test.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@types/node": "^24.10.0",
+    "typescript": "^5.9.3"
+  }
+}

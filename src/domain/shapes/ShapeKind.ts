@@ -1,0 +1,1 @@
+export type ShapeKind = 'rect' | 'circle' | 'ellipse' | 'line' | 'text' | 'g';
