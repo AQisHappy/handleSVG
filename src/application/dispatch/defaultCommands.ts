@@ -7,7 +7,9 @@ import { GroupCommand } from '../commands/GroupCommand.ts';
 import { HelpCommand } from '../commands/HelpCommand.ts';
 import { InitCommand } from '../commands/InitCommand.ts';
 import { MoveCommand } from '../commands/MoveCommand.ts';
+import { ReadCommand } from '../commands/ReadCommand.ts';
 import { RedoCommand } from '../commands/RedoCommand.ts';
+import { SaveCommand } from '../commands/SaveCommand.ts';
 import { ScaleCommand } from '../commands/ScaleCommand.ts';
 import { SendToBackCommand } from '../commands/SendToBackCommand.ts';
 import { SetCommand } from '../commands/SetCommand.ts';
@@ -16,15 +18,22 @@ import { TreeCommand } from '../commands/TreeCommand.ts';
 import { UndoCommand } from '../commands/UndoCommand.ts';
 import { UngroupCommand } from '../commands/UngroupCommand.ts';
 import type { EditorSession } from '../EditorSession.ts';
+import type { DocumentIo } from '../ports/DocumentIo.ts';
+import { UnavailableDocumentIo } from '../ports/UnavailableDocumentIo.ts';
 import { ShapeFactory } from '../factory/ShapeFactory.ts';
 import { CommandDispatcher } from './CommandDispatcher.ts';
 import { CommandRegistry } from './CommandRegistry.ts';
 
-export function createDefaultCommandDispatcher(session: EditorSession): CommandDispatcher {
+export function createDefaultCommandDispatcher(
+  session: EditorSession,
+  documentIo: DocumentIo = new UnavailableDocumentIo(),
+): CommandDispatcher {
   const registry = new CommandRegistry();
   const factory = new ShapeFactory();
 
   registry.register('init', 'init [w] [h]', 'Create an empty canvas', (args) => InitCommand.fromArgs(args));
+  registry.register('read', 'read <file.svg>', 'Read an SVG file', (args) => ReadCommand.fromArgs(args, documentIo));
+  registry.register('save', 'save [file.svg]', 'Write the current SVG document', (args) => SaveCommand.fromArgs(args, documentIo));
   registry.register('canvas', 'canvas [w] [h]', 'Show or resize the canvas', (args) => CanvasCommand.fromArgs(args));
   registry.register('create', 'create <type> <id> [params…] [in <gid>]', 'Create a shape', (args) => CreateCommand.fromArgs(args, factory));
   registry.register('delete', 'delete <id>', 'Delete a shape or container', (args) => DeleteCommand.fromArgs(args));

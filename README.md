@@ -4,7 +4,7 @@
 
 ## 当前阶段
 
-阶段四：完整编辑与显示功能。
+阶段五：SVG 读写与持久化。
 
 已实现：
 
@@ -13,13 +13,15 @@
 - 容器与叶子图形的统一移动、缩放、属性修改和删除。
 - `group`、`ungroup`、`addto` 及非法结构操作保护。
 - Command 模式、命令分发器和 ShapeFactory。
-- 完整命令：`init`、`canvas`、`create`、`delete`、`move`、`scale`、`set`、`group`、`ungroup`、`addto`、`front`、`back`、`tree`、`show`、`undo`、`redo`、`help`。
+- 完整命令：`init`、`read`、`save`、`canvas`、`create`、`delete`、`move`、`scale`、`set`、`group`、`ungroup`、`addto`、`front`、`back`、`tree`、`show`、`undo`、`redo`、`help`。
+- SVG XML 读取、序列化和浏览器可直接打开的 SVG 输出。
+- 外部 SVG 缺失 id 时自动补全并输出警告。
+- `save` 支持默认保存到读取路径或显式指定新路径。
+- 读写失败不影响当前文档和历史状态。
 - 结构树内联几何属性，`show` 展示单个图形详情。
 - 一条编辑命令对应一个 undo 单元，redo 栈在新编辑后清空。
 - 文档类命令后的 undo/redo 锁定规则。
 - 支持注释和双引号参数的 REPL，错误统一以 `error:` 输出。
-
-当前尚未实现 SVG 文件读取和保存。
 
 ## 操作教程
 

@@ -31,6 +31,7 @@ export class InitCommand implements Command {
   execute(context: CommandContext): CommandResult {
     const document = new Document(this.width, this.height);
     context.setDocument(document);
+    context.setCurrentPath(null);
     return commandResult(`canvas ${document.width}x${document.height} created`);
   }
 }

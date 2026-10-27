@@ -7,15 +7,19 @@ import type { Document } from '../domain/Document.ts';
 
 export class EditorSession implements CommandContext {
   private document: Document | null;
+  private currentPath: string | null;
   private readonly undoManager: UndoManager;
 
   constructor() {
     this.document = null;
+    this.currentPath = null;
     this.undoManager = new UndoManager();
   }
 
   getDocument(): Document | null { return this.document; }
   setDocument(document: Document | null): void { this.document = document; }
+  getCurrentPath(): string | null { return this.currentPath; }
+  setCurrentPath(path: string | null): void { this.currentPath = path; }
 
   requireDocument(): Document {
     if (this.document === null) throw new NoDocumentError();

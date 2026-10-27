@@ -1,8 +1,8 @@
 # SVG CLI 操作教程
 
-本教程对应阶段四完成后的可运行版本。当前版本支持完整的内存编辑、结构树查看、属性查看、画布调整、undo/redo 和 REPL。
+本教程对应阶段五完成后的可运行版本。当前版本支持完整编辑、结构树查看、画布调整、undo/redo、REPL，以及 SVG 文件读取和保存。
 
-> 当前尚未实现 SVG 文件 `read` / `save`，退出 CLI 后内存中的文档会丢失。
+> 文件路径建议使用双引号包裹，尤其是包含空格的中文路径或 Windows 路径。
 
 ## 1. 环境要求
 
@@ -72,6 +72,60 @@ show r1
 rect#r1  parent=svg
   x=100 y=100 width=160 height=60
   fill=#4a90d9
+```
+
+### 2.1 读取已有 SVG
+
+```text
+read <file.svg>
+```
+
+示例：
+
+```text
+read "C:\diagrams\demo.svg"
+```
+
+读取成功后 CLI 会显示元素数量：
+
+```text
+read C:\diagrams\demo.svg (7 elements)
+```
+
+如果外部 SVG 中的元素缺少 id，会自动生成 id 并打印警告：
+
+```text
+warning: assigned id rect1 to unnamed <rect>
+```
+
+自动生成的 id 按 `标签名+序号` 形式构造，例如 `rect1`、`rect2`、`circle1`。
+
+### 2.2 保存 SVG
+
+无参数保存到最近一次读取或保存的路径：
+
+```text
+save
+```
+
+也可以指定新路径：
+
+```text
+save "C:\diagrams\output.svg"
+```
+
+成功输出：
+
+```text
+saved to C:\diagrams\output.svg (7 elements)
+```
+
+生成的 SVG 包含 XML 声明、`xmlns`、画布尺寸和 `viewBox`，可以直接用 Chrome、Edge 或 Firefox 打开。
+
+保存失败不会改变当前文档：
+
+```text
+error: cannot write file: C:\diagrams\output.svg
 ```
 
 ## 3. 创建图形
@@ -351,7 +405,8 @@ redo
 - 一条编辑命令对应一个 undo 单元。
 - 执行新编辑后，redo 栈会被清空。
 - `tree`、`show`、`help` 不进入历史栈。
-- 执行 `init`、修改 `canvas` 等文档操作后，undo/redo 会暂时锁定，下一次编辑后重新解锁。
+- 执行 `init`、`read`、`save`、修改 `canvas` 等文档操作后，undo/redo 会暂时锁定，下一次编辑后重新解锁。
+- `read` 会替换当前文档并清空历史；`save` 不会改变文档结构。
 
 ## 8. 完整示例：普通示意图
 
@@ -373,6 +428,7 @@ set title text "My Diagram v2"
 delete box
 undo
 tree
+save "demo.svg"
 exit
 ```
 
@@ -393,6 +449,7 @@ move node2 0 100
 undo
 set process-label text "处理数据 v2"
 tree flowchart
+save "flowchart.svg"
 exit
 ```
 
@@ -432,6 +489,24 @@ error: scale factor must be positive
 
 ```text
 error: no document. use 'init' or 'read' first
+```
+
+文件不存在或无法解析：
+
+```text
+error: cannot read file: C:\diagrams\missing.svg
+```
+
+文件不可写：
+
+```text
+error: cannot write file: C:\diagrams\output.svg
+```
+
+首次保存但没有当前路径：
+
+```text
+error: save requires a file path
 ```
 
 ## 11. 运行测试
