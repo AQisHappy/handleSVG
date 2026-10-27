@@ -76,6 +76,46 @@ export class ShapeFactory {
     }
   }
 
+  createFromAttributes(
+    type: string,
+    id: string,
+    attributes: ReadonlyMap<string, string>,
+    textContent = '',
+  ): Shape {
+    const value = (name: string, fallback = '0'): string => attributes.get(name) ?? fallback;
+    let params: string[];
+
+    switch (type) {
+      case 'rect':
+        params = [value('x'), value('y'), value('width'), value('height')];
+        break;
+      case 'circle':
+        params = [value('cx'), value('cy'), value('r')];
+        break;
+      case 'ellipse':
+        params = [value('cx'), value('cy'), value('rx'), value('ry')];
+        break;
+      case 'line':
+        params = [value('x1'), value('y1'), value('x2'), value('y2')];
+        break;
+      case 'text':
+        params = [value('x'), value('y'), textContent];
+        break;
+      case 'g':
+        params = [];
+        break;
+      default:
+        throw new UnknownShapeTypeError(type);
+    }
+
+    const shape = this.create(type, id, params);
+    for (const name of ['fill', 'stroke', 'stroke-width']) {
+      const style = attributes.get(name);
+      if (style !== undefined) shape.setAttribute(name, style);
+    }
+    return shape;
+  }
+
   private expectParameterCount(type: string, params: readonly string[], min: number, max: number): void {
     if (params.length < min || params.length > max) {
       throw new InvalidCommandError(`invalid parameter count for ${type}`);

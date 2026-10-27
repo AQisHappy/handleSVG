@@ -36,7 +36,7 @@ export class Repl {
           this.output.write(`${formatError(error)}\n`);
         }
 
-        if (!readline.closed) readline.prompt();
+        if (!this.input.readableEnded) readline.prompt();
       }
     } finally {
       readline.close();

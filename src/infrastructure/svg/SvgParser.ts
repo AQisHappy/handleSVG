@@ -1,12 +1,8 @@
 import type { DocumentReadResult } from '../../application/ports/DocumentIo.ts';
+import { ShapeFactory } from '../../application/factory/ShapeFactory.ts';
 import { Document } from '../../domain/Document.ts';
-import { CircleShape } from '../../domain/shapes/CircleShape.ts';
-import { EllipseShape } from '../../domain/shapes/EllipseShape.ts';
 import { GroupShape } from '../../domain/shapes/GroupShape.ts';
-import { LineShape } from '../../domain/shapes/LineShape.ts';
-import { RectShape } from '../../domain/shapes/RectShape.ts';
 import type { Shape } from '../../domain/shapes/Shape.ts';
-import { TextShape } from '../../domain/shapes/TextShape.ts';
 import type { XmlElementNode } from './XmlNode.ts';
 import { XmlParser } from './XmlParser.ts';
 
@@ -18,9 +14,11 @@ interface ParseState {
 
 export class SvgParser {
   private readonly xmlParser: XmlParser;
+  private readonly shapeFactory: ShapeFactory;
 
-  constructor(xmlParser = new XmlParser()) {
+  constructor(xmlParser = new XmlParser(), shapeFactory = new ShapeFactory()) {
     this.xmlParser = xmlParser;
+    this.shapeFactory = shapeFactory;
   }
 
   parse(xml: string): DocumentReadResult {
@@ -55,62 +53,12 @@ export class SvgParser {
 
   private createShape(element: XmlElementNode, state: ParseState): Shape {
     const id = this.allocateId(element, state);
-    const attributes = element.attributes;
-    let shape: Shape;
-
-    switch (element.name) {
-      case 'rect':
-        shape = new RectShape(
-          id,
-          this.number(attributes.get('x'), 0),
-          this.number(attributes.get('y'), 0),
-          this.number(attributes.get('width'), 0),
-          this.number(attributes.get('height'), 0),
-        );
-        break;
-      case 'circle':
-        shape = new CircleShape(
-          id,
-          this.number(attributes.get('cx'), 0),
-          this.number(attributes.get('cy'), 0),
-          this.number(attributes.get('r'), 0),
-        );
-        break;
-      case 'ellipse':
-        shape = new EllipseShape(
-          id,
-          this.number(attributes.get('cx'), 0),
-          this.number(attributes.get('cy'), 0),
-          this.number(attributes.get('rx'), 0),
-          this.number(attributes.get('ry'), 0),
-        );
-        break;
-      case 'line':
-        shape = new LineShape(
-          id,
-          this.number(attributes.get('x1'), 0),
-          this.number(attributes.get('y1'), 0),
-          this.number(attributes.get('x2'), 0),
-          this.number(attributes.get('y2'), 0),
-        );
-        break;
-      case 'text':
-        shape = new TextShape(
-          id,
-          this.number(attributes.get('x'), 0),
-          this.number(attributes.get('y'), 0),
-          this.collectText(element).trim(),
-        );
-        break;
-      case 'g':
-        shape = new GroupShape(id);
-        break;
-      default:
-        throw new Error(`unsupported SVG element: <${element.name}>`);
-    }
-
-    this.applyStyles(shape, attributes);
-    return shape;
+    return this.shapeFactory.createFromAttributes(
+      element.name,
+      id,
+      element.attributes,
+      this.collectText(element).trim(),
+    );
   }
 
   private allocateId(element: XmlElementNode, state: ParseState): string {
@@ -131,13 +79,6 @@ export class SvgParser {
     state.usedIds.add(generated);
     state.warnings.push(`warning: assigned id ${generated} to unnamed <${element.name}>`);
     return generated;
-  }
-
-  private applyStyles(shape: Shape, attributes: ReadonlyMap<string, string>): void {
-    for (const name of ['fill', 'stroke', 'stroke-width']) {
-      const value = attributes.get(name);
-      if (value !== undefined) shape.setAttribute(name, value);
-    }
   }
 
   private number(raw: string | undefined, fallback: number): number {
