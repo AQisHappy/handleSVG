@@ -3,6 +3,7 @@ import { DuplicateIdError } from './errors/DuplicateIdError.ts';
 import { InvalidOperationError } from './errors/InvalidOperationError.ts';
 import { NotContainerError } from './errors/NotContainerError.ts';
 import { ShapeNotFoundError } from './errors/ShapeNotFoundError.ts';
+import type { ShapeLocation } from './ShapeLocation.ts';
 import { GroupShape } from './shapes/GroupShape.ts';
 import type { Shape } from './shapes/Shape.ts';
 
@@ -31,25 +32,27 @@ export class Document {
   }
 
   addShape(shape: Shape, containerId?: string): Shape {
+    const parentId = containerId ?? null;
+    const index = parentId === null ? this.rootShapes.length : this.requireContainer(parentId).childCount;
+    return this.insertShape(shape, parentId, index);
+  }
+
+  insertShape(shape: Shape, containerId: string | null, index: number): Shape {
     if (shape.getParent() !== null) {
       throw new InvalidOperationError(`shape already has a parent: ${shape.id}`);
     }
 
     const subtree = [shape, ...this.getSubtree(shape)];
-    const seen = new Set<string>();
-    for (const node of subtree) {
-      if (seen.has(node.id) || this.shapesById.has(node.id)) throw new DuplicateIdError(node.id);
-      seen.add(node.id);
+    this.assertSubtreeAvailable(subtree);
+    const container = containerId === null ? null : this.requireContainer(containerId);
+    const length = container === null ? this.rootShapes.length : container.childCount;
+
+    if (!Number.isInteger(index) || index < 0 || index > length) {
+      throw new InvalidOperationError(`invalid child index: ${index}`);
     }
 
-    if (containerId === undefined) {
-      this.rootShapes.push(shape);
-    } else {
-      const container = this.find(containerId);
-      if (container === undefined) throw new ContainerNotFoundError(containerId);
-      if (!(container instanceof GroupShape)) throw new NotContainerError(containerId);
-      container.addChild(shape);
-    }
+    if (container === null) this.rootShapes.splice(index, 0, shape);
+    else container.insertChild(index, shape);
 
     for (const node of subtree) this.shapesById.set(node.id, node);
     return shape;
@@ -62,6 +65,14 @@ export class Document {
     const shape = this.find(id);
     if (shape === undefined) throw new ShapeNotFoundError(id);
     return shape;
+  }
+
+  getLocation(id: string): ShapeLocation {
+    const shape = this.getShape(id);
+    const parent = shape.getParent();
+    const index = parent === null ? this.rootShapes.indexOf(shape) : parent.getChildIndex(id);
+    if (index < 0) throw new InvalidOperationError(`shape is not attached to the document: ${id}`);
+    return { containerId: parent?.id ?? null, index };
   }
 
   getParent(id: string): GroupShape | null { return this.getShape(id).getParent(); }
@@ -86,6 +97,25 @@ export class Document {
   move(id: string, dx: number, dy: number): void { this.getShape(id).move(dx, dy); }
   scale(id: string, factor: number): void { this.getShape(id).scale(factor); }
   setAttribute(id: string, name: string, value: string): void { this.getShape(id).setAttribute(name, value); }
+
+  moveShape(id: string, containerId: string | null, index: number): void {
+    const shape = this.getShape(id);
+    const container = containerId === null ? null : this.requireContainer(containerId);
+
+    if (container === shape) throw new InvalidOperationError(`cannot add container to itself: ${id}`);
+    if (container !== null && shape instanceof GroupShape && shape.contains(container)) {
+      throw new InvalidOperationError(`cannot add a container into its own descendant: ${shape.id}`);
+    }
+
+    const length = container === null ? this.rootShapes.length : container.childCount;
+    if (!Number.isInteger(index) || index < 0 || index > length) {
+      throw new InvalidOperationError(`invalid child index: ${index}`);
+    }
+
+    this.detach(shape);
+    if (container === null) this.rootShapes.splice(Math.min(index, this.rootShapes.length), 0, shape);
+    else container.insertChild(Math.min(index, container.childCount), shape);
+  }
 
   delete(id: string): Shape {
     const shape = this.getShape(id);
@@ -120,7 +150,6 @@ export class Document {
     const anchorParent = first.getParent();
     const insertionIndex = this.getDetachedInsertionIndex(first, selected);
     for (const shape of selected) this.detach(shape);
-
     for (const shape of selected) group.addChild(shape);
 
     if (anchorParent === null) this.rootShapes.splice(insertionIndex, 0, group);
@@ -133,23 +162,39 @@ export class Document {
   ungroup(groupId: string): readonly Shape[] {
     const shape = this.getShape(groupId);
     if (!(shape instanceof GroupShape)) throw new NotContainerError(groupId);
+    if (shape.getParent() === null) {
+      throw new InvalidOperationError(`cannot ungroup top-level container: ${groupId}`);
+    }
+    return this.dissolveGroup(groupId);
+  }
+
+  /** @internal Used by command undo after the user-facing top-level check. */
+  dissolveGroup(groupId: string): readonly Shape[] {
+    const shape = this.getShape(groupId);
+    if (!(shape instanceof GroupShape)) throw new NotContainerError(groupId);
 
     const parent = shape.getParent();
-    if (parent === null) throw new InvalidOperationError(`cannot ungroup top-level container: ${groupId}`);
+    const insertionIndex = parent === null ? this.rootShapes.indexOf(shape) : parent.getChildIndex(groupId);
+    if (insertionIndex < 0) throw new InvalidOperationError(`shape is not attached to the document: ${groupId}`);
 
-    const insertionIndex = parent.getChildIndex(groupId);
     const children = shape.removeAllChildren();
-    parent.removeChild(groupId);
+    if (parent === null) {
+      this.rootShapes.splice(insertionIndex, 1);
+      shape.setParent(null);
+    } else {
+      parent.removeChild(groupId);
+    }
     this.shapesById.delete(groupId);
-    for (const [offset, child] of children.entries()) parent.insertChild(insertionIndex + offset, child);
+
+    for (const [offset, child] of children.entries()) {
+      if (parent === null) this.rootShapes.splice(insertionIndex + offset, 0, child);
+      else parent.insertChild(insertionIndex + offset, child);
+    }
     return children;
   }
 
   addto(groupId: string, shapeId: string): void {
-    const target = this.find(groupId);
-    if (target === undefined) throw new ContainerNotFoundError(groupId);
-    if (!(target instanceof GroupShape)) throw new NotContainerError(groupId);
-
+    const target = this.requireContainer(groupId);
     const shape = this.getShape(shapeId);
     if (shape === target) throw new InvalidOperationError(`cannot add container to itself: ${groupId}`);
     if (shape instanceof GroupShape && shape.contains(target)) {
@@ -180,6 +225,21 @@ export class Document {
       return;
     }
     parent.sendChildToBack(id);
+  }
+
+  private requireContainer(id: string): GroupShape {
+    const container = this.find(id);
+    if (container === undefined) throw new ContainerNotFoundError(id);
+    if (!(container instanceof GroupShape)) throw new NotContainerError(id);
+    return container;
+  }
+
+  private assertSubtreeAvailable(subtree: readonly Shape[]): void {
+    const seen = new Set<string>();
+    for (const node of subtree) {
+      if (seen.has(node.id) || this.shapesById.has(node.id)) throw new DuplicateIdError(node.id);
+      seen.add(node.id);
+    }
   }
 
   private getSubtree(shape: Shape): Shape[] {

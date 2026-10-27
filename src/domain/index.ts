@@ -13,5 +13,6 @@ export { GroupShape } from './shapes/GroupShape.ts';
 export { LineShape } from './shapes/LineShape.ts';
 export { RectShape } from './shapes/RectShape.ts';
 export { Shape } from './shapes/Shape.ts';
+export type { ShapeLocation } from './ShapeLocation.ts';
 export type { ShapeKind } from './shapes/ShapeKind.ts';
 export { TextShape } from './shapes/TextShape.ts';

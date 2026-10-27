@@ -1,0 +1,1 @@
+export type HistoryPolicy = 'record' | 'reset' | 'lock' | 'none';

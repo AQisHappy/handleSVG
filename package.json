@@ -6,8 +6,9 @@
   "description": "SVG CLI editor",
   "engines": { "node": ">=22.18.0" },
   "scripts": {
-    "test": "node --test test/document.test.ts test/shape.test.ts test/composite.test.ts",
-    "test:watch": "node --test --watch test/document.test.ts test/shape.test.ts test/composite.test.ts",
+    "cli": "node src/cli/main.ts",
+    "test": "node --test test/document.test.ts test/shape.test.ts test/composite.test.ts test/parser.test.ts test/command.test.ts test/history.test.ts test/repl.test.ts test/phase4.test.ts",
+    "test:watch": "node --test --watch test/document.test.ts test/shape.test.ts test/composite.test.ts test/parser.test.ts test/command.test.ts test/history.test.ts test/repl.test.ts test/phase4.test.ts",
     "typecheck": "tsc --noEmit"
   },
   "devDependencies": {

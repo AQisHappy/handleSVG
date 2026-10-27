@@ -22,7 +22,6 @@ export abstract class Shape {
 
   get id(): string { return this.shapeId; }
   abstract get kind(): ShapeKind;
-
   getParent(): GroupShape | null { return this.parentGroup; }
 
   /** @internal Parent changes are coordinated by GroupShape and Document. */
@@ -50,6 +49,13 @@ export abstract class Shape {
     if (!this.applyOwnAttribute(name, value)) {
       throw new UnknownAttributeError(name);
     }
+  }
+
+  unsetAttribute(name: string): void {
+    if (!STYLE_ATTRIBUTE_NAMES.has(name)) {
+      throw new InvalidOperationError(`attribute cannot be removed: ${name}`);
+    }
+    this.styleValues.delete(name);
   }
 
   getAttribute(name: string): string | undefined {
