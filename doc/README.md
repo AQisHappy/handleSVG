@@ -13,7 +13,7 @@
 - REPL 和错误隔离。
 - 外部 SVG 测试夹具与自动化测试。
 
-按本次要求，未执行 Git 整理、远程推送和 `final` tag 创建。
+代码已通过 Git 分阶段提交并推送至远程仓库；最终提交版本须在截止时间前创建统一命名为 `final` 的 tag。
 
 ## 2. 快速开始
 
@@ -41,9 +41,9 @@ svg> exit
 
 ## 3. 架构方案
 
-> 按项目约定，本版本不提供组件图或包图，改用目录结构、职责表和依赖方向表说明架构。
+### 3.1 模块划分与目录结构
 
-### 3.1 实际目录结构
+项目按职责划分为 `domain`、`application`、`infrastructure`、`cli` 四个核心模块，并以 `test`、`scripts` 作为支撑目录。目录结构如下：
 
 ```text
 src/
@@ -77,6 +77,12 @@ scripts/
 └── check-syntax.mjs
 ```
 
+模块职责及依赖方向如包图所示：
+
+![handleSVG 包图](./包图.drawio.png)
+
+*图 1：handleSVG 包图，用于展示核心模块之间的依赖关系。*
+
 ### 3.2 模块职责
 
 | 模块 | 职责 |
@@ -102,7 +108,7 @@ scripts/
 | `domain` | 仅自身模块和 TypeScript 标准能力 | 不依赖 CLI、应用层、XML 或文件系统。 |
 | `application` | `domain`、应用层自身模块 | 通过端口使用 IO，不导入基础设施实现。 |
 | `infrastructure` | `application` 端口/工厂契约、`domain`、Node 标准库 | 实现 SVG 和文件系统适配。 |
-| `cli/Repl.ts` | `application` | 只调用命令分发器。 |
+| `cli/Repl.ts` | `application`、CLI 自身工具、Node 标准库 | 只调用命令分发器；输入输出使用 Node 标准流。 |
 | `cli/main.ts` | `application`、`infrastructure` | 唯一组合根，负责注入 `SvgDocumentIo`。 |
 | `scripts` | Node 标准库 | 独立质量检查脚本。 |
 | `test` | 被测模块 | 从公开契约验证行为。 |
@@ -115,27 +121,40 @@ scripts/
 - 类创建的类型分派只存在于 `ShapeFactory`；命令名分派由 `CommandRegistry` 的映射完成。
 - `SvgParser` 不直接创建具体图形类，而是委托 `ShapeFactory.createFromAttributes`。
 
-### 3.4 设计模式
+### 3.4 设计模式的选择与落地
+
+项目使用了题目要求的 **Command 模式**，并围绕职责边界采用了 Composite、Factory、Adapter、Registry 和 Template Method。
 
 | 模式 | 落地位置 | 用途 |
 |---|---|---|
-| Command | `application/commands/`、`UndoManager` | 一条编辑命令封装一次操作及其撤销逻辑。 |
+| Command | `application/commands/`、`Command.ts`、`UndoManager` | 一条命令封装一次操作、执行参数及其撤销逻辑。 |
 | Composite | `Shape`、`GroupShape` | 容器和叶子图形使用统一操作契约，容器递归处理子节点。 |
 | Factory | `ShapeFactory` | CLI create 和 SVG 读取共用同一图形创建入口。 |
 | Adapter | `DocumentIo`、`SvgDocumentIo` | 应用层不直接依赖文件系统和 XML 解析器。 |
 | Registry | `CommandRegistry` | 集中注册命令，避免散落的命令名分支。 |
 | Template Method | `Shape` 基类 | 统一 move/scale/set 流程，子类实现几何细节。 |
 
+Command 模式的落地方式如下：
+
+- `Command` 接口定义 `execute()`，需要支持撤销的命令同时实现 `undo()`；`historyPolicy` 区分记录、重置和锁定历史等行为。
+- 每个编辑操作由独立命令对象表示，例如 `CreateCommand`、`MoveCommand`、`GroupCommand` 等。命令在构造阶段解析并校验参数，在 `execute()` 时修改文档。
+- `UndoManager` 只负责维护 undo/redo 栈和 IO 边界，不直接操作图形；执行成功后保存命令对象，撤销时调用该对象的 `undo()`，重做时再次调用 `execute()`。
+- `CommandRegistry` 负责把命令名映射到命令工厂，`CommandDispatcher` 负责解析输入并交给 `EditorSession`，避免在 REPL 中堆叠命令分支。
+
 ### 3.5 变化点假设
 
-| 变化点 | 当前设计 | 说明 |
-|---|---|---|
-| 新增图形类型 | ShapeFactory + 未来 ShapeProvider | 当前 `box` 未实现，`create box` 返回未知类型。 |
-| SVG 语法扩展 | infrastructure/svg | 解析器和序列化器可独立演进。 |
-| 新命令 | application/commands + registry | 新命令类注册后即可使用。 |
-| 新交互通道 | EditorSession + Command | GUI 或 agent 可复用现有命令层。 |
-| undo 策略变化 | Command.undo 契约 | 未来可替换为快照，不影响领域类。 |
-| 输出格式变化 | application/format 和 cli | 当前为单 CLI 场景，暂不拆独立 presentation 层。 |
+判断未来最可能发生变化的是以下几处。每项都说明已预留的扩展点，或当前决定不预留的理由。
+
+| 变化点 | 预留内容或不留理由 |
+|---|---|
+| 新增图形类型或图形插件 | 已预留统一创建入口 `ShapeFactory`，新增内置图形时集中扩展该处。当前不引入动态插件加载和 `ShapeProvider`，因为题目只要求六种内置图形，提前增加插件协议会提高理解与测试成本。 |
+| SVG 语法或文件格式扩展 | 已通过 `DocumentIo` 端口隔离持久化，解析器、序列化器和文件系统适配器可在 `infrastructure/svg/` 内独立演进，不污染领域层。 |
+| 新增编辑或查询命令 | 已预留 `Command` 契约和 `CommandRegistry`。新增命令可独立实现并注册，不需要修改 REPL 的分派逻辑。 |
+| 从 CLI 扩展到 GUI 或 Agent 入口 | 已通过 `EditorSession`、`CommandDispatcher` 和 `Command` 将交互入口与业务操作分离。当前不为尚不存在的 GUI 建立独立表现层。 |
+| undo/redo 策略变化 | 已保留 `Command.undo()` 契约，必要时可替换为快照或操作日志方案。当前文档规模较小，使用命令级撤销足以满足需求，暂不引入快照带来的内存开销。 |
+| 输出格式或展示终端变化 | 当前格式化集中在 `application/format/`，单 CLI 场景下可直接复用。暂不拆独立 presentation 层，因为只有一种输出通道；若增加 GUI，再拆分展示模型。 |
+| 持久化目标变化 | 已通过 `DocumentIo` 端口与 `SvgDocumentIo` 适配器隔离；若未来增加其他格式或远程存储，可新增适配器而不是修改应用层。 |
+
 ## 4. 过程记录
 
 本节记录开发中具有代表性的讨论、问题发现和纠正过程。项目采用分阶段推进，并用自动化测试和人工审查校验 AI 生成的设计与代码。
@@ -198,7 +217,7 @@ Edge headless 在当前环境因 GPU/Profile 权限失败。Chrome headless 使�
 - 保留：先写测试再修正结构问题。
 - 暂缓：`box` 插件、动态插件加载和结构路径寻址。
 - 暂不引入：外部 XML 依赖；当前环境网络受限，使用受控的内置 XML 解析器。
-- 未提供：组件图和包图；按项目约定用文字职责表和依赖表替代。
+- 补充：包图已提供于 `doc/包图.drawio.png`，用于直观展示模块及其依赖关系。
 
 ## 5. 一致性自查
 
@@ -207,39 +226,45 @@ Edge headless 在当前环境因 GPU/Profile 权限失败。Chrome headless 使�
 | 方案 | 实际 | 结论 |
 |---|---|---|
 | `domain` 独立领域模型 | `src/domain/` | 一致 |
-| `application` 命令和历史 | `src/application/` | 一致 |
+| `application` 命令、历史、解析和格式化 | `src/application/` | 一致 |
 | `infrastructure` SVG IO | `src/infrastructure/svg/` | 一致 |
 | CLI 表现层 | `src/cli/` | 一致 |
-| 组合根独立目录 | 无 `src/bootstrap/`，由 `src/cli/main.ts` 装配 | 有偏差，已记录 |
-| 独立 presentation 格式化层 | 格式化位于 `src/application/format/` | 有偏差，已记录 |
-| 插件目录 | 当前未实现 `src/plugins/` | 阶段边界内未实现 |
+| 组合根独立目录 | 无 `src/bootstrap/`，由 `src/cli/main.ts` 装配 | 有偏差，已记入 5.2 |
+| 独立 presentation 格式化层 | 格式化位于 `src/application/format/` | 有偏差，已记入 5.2 |
+| 插件目录 | 当前未实现 `src/plugins/` | 阶段边界内未实现，已记入 5.2 |
 
-偏差说明：
+明确回答：实际目录与方案的核心分层一致。实际存在组合根位置、格式化层位置和插件目录三项偏差，均已记录在修订记录中，不影响当前依赖方向。
 
-1. 当前只有 CLI 一个入口，`src/cli/main.ts` 作为组合根比新增 `src/bootstrap/` 更简单；依赖仍只由组合根连接。
-2. 命令返回文本结果，格式逻辑放在应用层可避免领域层依赖展示细节；如果未来增加 GUI，应将格式化拆到独立 presentation 层。
-3. `box` 属于后续插件化阶段，当前 `create box` 仍返回 `unknown shape type`。
+### 5.2 修订记录（方案与实际）
 
-### 5.2 依赖方向自查
+| 编号 | 原方案 | 实际实现或修订 | 原因与影响 |
+|---|---|---|---|
+| R1 | 独立 `src/bootstrap/` 组合根 | 由 `src/cli/main.ts` 承担组合根 | 当前只有 CLI 一个入口，独立目录没有额外收益；应用层与基础设施层仍只在该组合根汇合。 |
+| R2 | 独立 presentation 格式化层 | 暂用 `src/application/format/` | 当前只有 CLI 且格式化输入来自命令结果；避免为单一展示通道增加层数。未来增加 GUI 时再拆分。 |
+| R3 | 后续阶段提供 `src/plugins/` 与 `box` 插件 | 本阶段未实现 | `box` 和 ShapeProvider 属于后续插件化范围，当前需求只要求六种内置图形。 |
+| R4 | 初版文档仅用目录、职责表和依赖表说明架构 | 新增 `doc/包图.drawio.png` | 本次作业明确要求模块划分附图，补充包图以提高架构可读性。 |
+
+### 5.3 依赖方向自查
 
 - 领域层没有导入应用层、基础设施层或 CLI。
 - 应用层没有导入基础设施层或 CLI。
 - 基础设施层只导入应用层端口/工厂契约、领域模型和 Node 标准库。
 - CLI 的 `Repl` 只依赖应用层；`main.ts` 是唯一同时导入应用层和基础设施层的位置。
+- 抽样检查 `CreateCommand`、`SvgParser`、`SvgDocumentIo` 和 `main.ts` 的 import 后，未发现违反依赖方向的情况。
 - 未发现循环依赖。
 
-### 5.3 范式与分派自查
+### 5.4 范式与分派自查
 
 - 使用 TypeScript 面向对象类层次。
 - 图形类字段私有化，通过方法访问和修改。
 - 类按文件拆分。
 - 主业务逻辑没有贫血模型或过程式自由函数。
-- 命令名分派在 CommandRegistry。
-- 图形类型创建分派在 ShapeFactory。
-- `switch (type)` 仅存在于 ShapeFactory 文件。
-- SvgParser 不再直接创建具体图形类。
+- 命令名分派在 `CommandRegistry`。
+- 图形类型创建分派在 `ShapeFactory`。
+- `switch (type)` 仅存在于 `ShapeFactory` 文件。
+- `SvgParser` 不再直接创建具体图形类。
 
-### 5.4 功能一致性自查
+### 5.5 功能一致性自查
 
 - `rect`、`circle`、`ellipse`、`line`、`text`、`g` 可创建、修改和删除。
 - 容器支持递归移动、缩放和删除。
@@ -290,7 +315,7 @@ npm run test:watch
 
 ### 6.3 最近一次验证结果
 
-`npm run verify` 结果：
+2026-10-29 执行 `npm run verify`，结果：
 
 ```text
 Syntax check passed for 87 TypeScript files.
@@ -345,22 +370,10 @@ tsc --noEmit
 - 当前 XML 解析器覆盖项目需要的 SVG 子集，不追求完整 XML/SVG 规范。
 - 不支持结构路径寻址或 XPath，所有操作使用唯一 id。
 - 当前只有 CLI 一个表现层，格式化代码暂位于应用层。
-- 按项目约定未提供组件图或包图。
 
-## 8. 本次阶段六范围
+## 8. 提交说明
 
-已完成：
-
-- 完整测试执行。
-- 依赖方向扫描。
-- 架构一致性自查。
-- 过程记录和 AI 协作问题复盘。
-- 质量保证手段和测试证据整理。
-- `doc/README.md` 编写。
-- 可复现语法检查脚本。
-
-按用户要求未执行：
-
-- 整理增量 Git 提交。
-- 推送到远程仓库。
-- 创建 `final` tag。
+- 代码仓库：<https://github.com/AQisHappy/handleSVG.git>
+- 开发过程采用分阶段 Git 提交，当前提交历史包含初始化、领域模型、编辑功能、SVG 读写与测试/类型检查等独立步骤，并已推送至 `origin/main`。
+- 最终提交版本须在截止时间前创建统一命名为 `final` 的 tag。
+- 本文档为 Markdown 格式，位于 `doc/README.md`；包图位于 `doc/包图.drawio.png`。
